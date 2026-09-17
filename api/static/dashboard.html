@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VRAM — SA Healthcare Investigator Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #121820;
+      --border: #1e2a38;
+      --text: #e6edf5;
+      --muted: #8b9bb0;
+      --accent: #3d9cf0;
+      --good: #3ecf8e;
+      --warn: #f0b429;
+      --bad: #f07178;
+      --crit: #ff5c5c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: #0e141c;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    header h1 span { color: var(--accent); }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted);
+    }
+    .dot.ok { background: var(--good); box-shadow: 0 0 8px var(--good); }
+    .dot.err { background: var(--bad); }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    button, select {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary {
+      background: #1a3a5c;
+      border-color: var(--accent);
+      color: #b8d9ff;
+    }
+    button.primary:hover { background: #234a72; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      min-height: 120px;
+    }
+    .panel.wide { grid-column: 1 / -1; }
+    .panel h2 {
+      margin: 0 0 0.85rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .hyp {
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .hyp:last-child { border-bottom: none; }
+    .hyp-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      align-items: baseline;
+      margin-bottom: 0.35rem;
+    }
+    .hyp-title strong { font-size: 0.95rem; }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: #1a2430;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .badge.active { color: var(--warn); border: 1px solid #5a4a20; }
+    .badge.confirmed { color: var(--crit); border: 1px solid #5a2020; }
+    .badge.emerging { color: var(--accent); border: 1px solid #1a3a5c; }
+    .badge.weakening, .badge.dismissed { color: var(--muted); }
+    .bar-wrap {
+      height: 8px;
+      background: #0b0f14;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0.4rem 0;
+    }
+    .bar {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+      background: linear-gradient(90deg, var(--accent), var(--good));
+    }
+    .bar.high { background: linear-gradient(90deg, var(--warn), var(--crit)); }
+    .meta { font-size: 0.8rem; color: var(--muted); }
+    .evt {
+      display: grid;
+      grid-template-columns: 70px 90px 1fr;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #182028;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    .evt .src { color: var(--accent); }
+    .evt .type { color: var(--text); }
+    .evt .who { color: var(--muted); }
+    .pred {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .pred:last-child { border-bottom: none; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+    .narrative {
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: #c5d0dc;
+    }
+    .log {
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .log div { padding: 0.15rem 0; }
+    footer {
+      text-align: center;
+      padding: 0.75rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>VRAM</span> SA Healthcare — Investigator Dashboard</h1>
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="healthText">connecting…</span>
+      <span id="clock"></span>
+    </div>
+    <div class="controls">
+      <select id="scenario">
+        <option value="exfiltration">PHI Exfiltration (SA)</option>
+        <option value="false-positive">False Positive</option>
+        <option value="credential-abuse">Credential Abuse</option>
+        <option value="normal">Normal</option>
+      </select>
+      <button class="primary" id="btnRun" onclick="runScenario()">Run scenario</button>
+      <button id="btnStep" onclick="stepScenario()" disabled>Step next</button>
+      <button onclick="resetState()">Reset</button>
+      <button onclick="refresh()">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Active hypotheses</h2>
+      <div id="hypotheses"><div class="empty">No hypotheses yet. Run a scenario.</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Predictions</h2>
+      <div id="predictions"><div class="empty">None</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent observations</h2>
+      <div id="events"><div class="empty">No events yet.</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>High-risk entities</h2>
+      <div id="entities"><div class="empty">—</div></div>
+    </section>
+
+    <section class="panel wide">
+      <h2>Investigation narrative</h2>
+      <div id="narrative" class="narrative empty">Run a scenario to generate a narrative.</div>
+    </section>
+
+    <section class="panel wide">
+      <h2>Activity log</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+
+  <footer>
+    VRAM — deterministic contextual reasoning · data from local API only · not a production SIEM
+  </footer>
+
+  <script>
+    const API = "";
+    let stepQueue = [];
+    let stepping = false;
+
+    function log(msg) {
+      const el = document.getElementById("log");
+      const t = new Date().toLocaleTimeString();
+      el.innerHTML = `<div>[${t}] ${msg}</div>` + el.innerHTML;
+    }
+
+    function confBar(c) {
+      const pct = Math.round(Math.min(1, Math.max(0, c)) * 100);
+      const cls = c >= 0.7 ? "high" : "";
+      return `<div class="bar-wrap"><div class="bar ${cls}" style="width:${pct}%"></div></div>
+              <div class="meta">${c.toFixed(2)} (${pct}%)</div>`;
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(API + path, opts);
+      if (!r.ok) throw new Error(`${path} → ${r.status}`);
+      return r.json();
+    }
+
+    async function refresh() {
+      try {
+        const health = await api("/health");
+        document.getElementById("dot").className = "dot ok";
+        document.getElementById("healthText").textContent =
+          `API ${health.status} · v${health.version || "?"}`;
+      } catch (e) {
+        document.getElementById("dot").className = "dot err";
+        document.getElementById("healthText").textContent = "API offline";
+        return;
+      }
+
+      document.getElementById("clock").textContent =
+        " · " + new Date().toLocaleTimeString();
+
+      const [hyps, events, preds] = await Promise.all([
+        api("/hypotheses"),
+        api("/events?limit=25"),
+        api("/predictions"),
+      ]);
+
+      // Hypotheses
+      const active = (hyps || []).filter(h =>
+        !["dismissed"].includes(h.status)
+      ).sort((a, b) => b.confidence - a.confidence);
+
+      const hypEl = document.getElementById("hypotheses");
+      if (!active.length) {
+        hypEl.innerHTML = '<div class="empty">No active hypotheses</div>';
+      } else {
+        hypEl.innerHTML = active.map(h => `
+          <div class="hyp">
+            <div class="hyp-title">
+              <strong>${escapeHtml(h.title)}</strong>
+              <span class="badge ${h.status}">${h.status}</span>
+            </div>
+            ${confBar(h.confidence)}
+            <div class="meta">
+              users: ${(h.related_users || []).join(", ") || "—"} ·
+              hosts: ${(h.related_hosts || []).join(", ") || "—"}
+            </div>
+          </div>
+        `).join("");
+      }
+
+      // Events
+      const evEl = document.getElementById("events");
+      const ordered = (events || []).slice().reverse();
+      if (!ordered.length) {
+        evEl.innerHTML = '<div class="empty">No events yet</div>';
+      } else {
+        evEl.innerHTML = ordered.map(e => {
+          const ts = (e.timestamp || "").slice(11, 19) || "—";
+          return `<div class="evt">
+            <span>${ts}</span>
+            <span class="src">${escapeHtml(e.source || "")}</span>
+            <span><span class="type">${escapeHtml(e.event_type || "")}</span>
+              <span class="who"> · ${escapeHtml(e.user || "-")} @ ${escapeHtml(e.host || e.source_ip || "-")}</span>
+            </span>
+          </div>`;
+        }).join("");
+      }
+
+      // Predictions
+      const pEl = document.getElementById("predictions");
+      if (!preds || !preds.length) {
+        pEl.innerHTML = '<div class="empty">None</div>';
+      } else {
+        pEl.innerHTML = preds.map(p => `
+          <div class="pred">
+            <strong>→ ${escapeHtml(p.predicted_event)}</strong>
+            <span class="meta"> (${Number(p.confidence).toFixed(2)})</span>
+            <div class="meta">${escapeHtml(p.explanation || "")}</div>
+          </div>
+        `).join("");
+      }
+
+      // High-risk
+      const users = new Set(), hosts = new Set();
+      active.filter(h => h.confidence >= 0.45).forEach(h => {
+        (h.related_users || []).forEach(u => users.add(u));
+        (h.related_hosts || []).forEach(x => hosts.add(x));
+      });
+      document.getElementById("entities").innerHTML = `
+        <div class="meta"><strong>Users</strong>: ${[...users].join(", ") || "(none)"}</div>
+        <div class="meta" style="margin-top:0.4rem"><strong>Hosts</strong>: ${[...hosts].join(", ") || "(none)"}</div>
+      `;
+
+      // Narrative from strongest hyp
+      if (active.length) {
+        const top = active[0];
+        try {
+          const tl = await api("/timeline/" + top.id);
+          const lines = (tl.events || []).map(e => {
+            const t = (e.timestamp || "").slice(11, 16);
+            return `${t}  ${e.source}  ${e.event_type}  ${e.user || ""}`;
+          });
+          document.getElementById("narrative").className = "narrative";
+          document.getElementById("narrative").textContent =
+            `Hypothesis: ${top.title} (${top.confidence.toFixed(2)})\n\n` +
+            lines.join("\n") +
+            `\n\nConfidence set from multi-source evidence.`;
+        } catch (_) {
+          document.getElementById("narrative").textContent = top.title;
+        }
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    async function runScenario() {
+      const name = document.getElementById("scenario").value;
+      const btn = document.getElementById("btnRun");
+      const stepBtn = document.getElementById("btnStep");
+      btn.disabled = true;
+      stepBtn.disabled = true;
+      log(`Starting scenario: ${name} (step-through so predictions appear)`);
+      try {
+        // Reset + load event queue, then inject one-by-one with a short pause
+        await api("/demo/reset", { method: "POST" });
+        const data = await api("/demo/" + name + "?mode=queue", { method: "POST" });
+        const queue = data.queue || [];
+        log(`${queue.length} events loaded`);
+        for (let i = 0; i < queue.length; i++) {
+          const ev = queue[i];
+          await api("/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ev),
+          });
+          log(`Event ${i + 1}/${queue.length}: ${ev.source} / ${ev.event_type}`);
+          await refresh();
+          // Pause so confidence + predictions are visible between steps
+          if (i < queue.length - 1) {
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+        }
+        log("Scenario complete");
+        await refresh();
+      } catch (e) {
+        log("Error: " + e.message);
+      }
+      btn.disabled = false;
+      stepBtn.disabled = false;
+    }
+
+    async function stepScenario() {
+      if (!stepQueue.length) {
+        const name = document.getElementById("scenario").value;
+        log(`Loading step queue: ${name}`);
+        const data = await api("/demo/" + name + "?mode=queue", { method: "POST" });
+        stepQueue = data.queue || [];
+        document.getElementById("btnStep").disabled = false;
+        log(`${stepQueue.length} events queued — click Step next`);
+        return;
+      }
+      const next = stepQueue.shift();
+      try {
+        await api("/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        log(`Step: ${next.source} / ${next.event_type}`);
+        await refresh();
+      } catch (e) {
+        log("Step error: " + e.message);
+      }
+      if (!stepQueue.length) log("Queue empty");
+    }
+
+    async function resetState() {
+      try {
+        await api("/demo/reset", { method: "POST" });
+        stepQueue = [];
+        log("State reset");
+        await refresh();
+      } catch (e) {
+        log("Reset error: " + e.message);
+      }
+    }
+
+    // Enable step after first queue load via button always usable to load
+    document.getElementById("btnStep").disabled = false;
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

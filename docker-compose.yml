@@ -1,0 +1,83 @@
+# VRAM Telemetry Integration Lab
+#
+# Default (light):
+#   docker compose up -d postgres keycloak
+#
+# Optional full Wazuh stack (heavy — ~4GB+ RAM recommended):
+#   docker compose --profile wazuh up -d
+#
+# VRAM itself runs on the host:
+#   uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+#   python main.py --scenario exfiltration
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: enterprise
+      POSTGRES_USER: vram
+      POSTGRES_PASSWORD: vram_lab_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./lab/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vram -d enterprise"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev --http-port=8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Optional Wazuh indexer + manager + dashboard (profile: wazuh)
+  # Not required for VRAM development — simulated JSON events are enough.
+  # Docs: https://documentation.wazuh.com/current/deployment-options/docker/index.html
+  # ---------------------------------------------------------------------------
+  wazuh-indexer:
+    profiles: ["wazuh"]
+    image: wazuh/wazuh-indexer:4.9.0
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+
+  wazuh-manager:
+    profiles: ["wazuh"]
+    image: wazuh/wazuh-manager:4.9.0
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "55000:55000"
+    volumes:
+      - wazuh-manager-data:/var/ossec/data
+    depends_on:
+      - wazuh-indexer
+
+  wazuh-dashboard:
+    profiles: ["wazuh"]
+    image: wazuh/wazuh-dashboard:4.9.0
+    ports:
+      - "8443:5601"
+    depends_on:
+      - wazuh-indexer
+      - wazuh-manager
+
+volumes:
+  pgdata:
+  wazuh-indexer-data:
+  wazuh-manager-data:
